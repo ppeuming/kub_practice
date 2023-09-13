@@ -1,15 +1,39 @@
 locals {
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
   region          = "ap-northeast-2"
-  vpc_id          = var.vpc_id
+  azs             = ["ap-northeast-2a", "ap-northeast-2c"]
+  cidr            = var.cidr
   public_subnets  = var.public_subnets
   private_subnets = var.private_subnets
+
+  any_port      = 0
+  any_protocol  = "-1"
+  tcp_protocol  = "tcp"
+  icmp_protocol = "icmp"
+  all_network   = "0.0.0.0/0"
+
+  cluster_name    = var.cluster_name
+  cluster_version = var.cluster_version
+  cluster_admin   = var.cluster_admin
 
   tag = {
     Environment = "test"
     Terraform   = "true"
   }
+}
+
+variable "cidr" {
+  description = "VPC CIDR BLOCK"
+  type        = string
+}
+
+variable "public_subnets" {
+  description = "VPC Public Subnets"
+  type        = list(any)
+}
+
+variable "private_subnets" {
+  description = "VPC Private Subnets"
+  type        = list(any)
 }
 
 variable "cluster_name" {
@@ -22,23 +46,7 @@ variable "cluster_version" {
   type        = string
 }
 
-variable "account_id" {
-  description = "IAM User Account ID"
+variable "cluster_admin" {
+  description = "Cluster Admin IAM User Account ID"
   type        = string
 }
-
-variable "vpc_id" {
-  description = "EKS VPC_ID"
-  type        = string
-}
-
-variable "public_subnets" {
-  description = "EKS VPC Public Subnets"
-  type        = list(any)
-}
-
-variable "private_subnets" {
-  description = "EKS VPC Public Subnets"
-  type        = list(any)
-}
-
