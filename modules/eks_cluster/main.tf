@@ -2,6 +2,51 @@
 # ================================================================
 # ================================================================
 
+# Provider
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region  = "ap-northeast-2"
+  profile = "admin_user"
+}
+
+/* 
+  EKS Cluster 구성 후 초기 구성 작업을 수행하기 위한 Terraform Kubernetes Provider 설정 
+  생성 된 EKS Cluster의 EndPoint 주소 및 인증정보등을 DataSource로 정의 후 Provider 설정 정보로 입력
+  EX): ConfigMap Object "aws-auth" 생성 및 사용자 등록
+ */
+
+# AWS EKS Cluster Data Source
+data "aws_eks_cluster" "cluster" {
+  name = module.eks.cluster_id
+}
+
+# AWS EKS Cluster Auth Data Source
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.eks.cluster_id
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+}
+
+# AWS EKS Cluster DataSource DOCS 
+# - aws_eks_cluster      : https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster.html
+# - aws_eks_cluster_auth : https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster_auth
+
+# ================================================================
+# ================================================================
+# ================================================================
+
 # VPC
 module "vpc" {
   source               = "terraform-aws-modules/vpc/aws"
@@ -15,6 +60,73 @@ module "vpc" {
   enable_dns_support   = "true"
   tags = {
     "TerraformManaged" = "true"
+  }
+}
+
+# ================================================================
+# ================================================================
+# ================================================================
+
+# Security-Group (BastionHost)
+module "BastionHost_SG" {
+  source          = "terraform-aws-modules/security-group/aws"
+  version         = "5.1.0"
+  name            = "BastionHost_SG"
+  description     = "BastionHost_SG"
+  vpc_id          = module.vpc.vpc_id
+  use_name_prefix = "false"
+
+  ingress_with_cidr_blocks = [
+    {
+      from_port   = local.ssh_port
+      to_port     = local.ssh_port
+      protocol    = local.tcp_protocol
+      description = "SSH"
+      cidr_blocks = local.all_network
+    },
+    {
+      from_port   = local.any_protocol
+      to_port     = local.any_protocol
+      protocol    = local.icmp_protocol
+      description = "ICMP"
+      cidr_blocks = local.cidr
+    }
+  ]
+  egress_with_cidr_blocks = [
+    {
+      from_port   = local.any_port
+      to_port     = local.any_port
+      protocol    = local.any_protocol
+      cidr_blocks = local.all_network
+    }
+  ]
+}
+
+# BastionHost EIP
+resource "aws_eip" "BastionHost_eip" {
+  instance = aws_instance.BastionHost.id
+  tags = {
+    Name = "BastionHost_EIP"
+  }
+}
+
+# BastionHost Key-Pair DataSource
+data "aws_key_pair" "EC2-Key" {
+  key_name = "EC2-key"
+}
+
+
+# BastionHost Instance 
+resource "aws_instance" "BastionHost" {
+  ami                         = "ami-0ea4d4b8dc1e46212"
+  instance_type               = "t2.micro"
+  key_name                    = data.aws_key_pair.EC2-Key.key_name
+  subnet_id                   = module.vpc.public_subnets[1]
+  associate_public_ip_address = true
+  vpc_security_group_ids      = [module.BastionHost_SG.security_group_id, data.aws_eks_cluster.cluster.vpc_config[0].cluster_security_group_id]
+
+  tags = {
+    Name = "BastionHost_Instance"
   }
 }
 
@@ -55,14 +167,6 @@ module "NAT_SG" {
   ]
 }
 
-# NAT Instance ENI EIP
-resource "aws_eip" "NAT_Instance_eip" {
-  network_interface = aws_network_interface.NAT_ENI.id
-  tags = {
-    Name = "NAT_EIP"
-  }
-}
-
 # NAT Instance ENI(Elastic Network Interface)
 resource "aws_network_interface" "NAT_ENI" {
   subnet_id         = module.vpc.public_subnets[0]
@@ -79,7 +183,6 @@ resource "aws_network_interface" "NAT_ENI" {
 resource "aws_instance" "NAT_Instance" {
   ami           = "ami-00295862c013bede0"
   instance_type = "t2.micro"
-  key_name      = data.aws_key_pair.EC2-Key.key_name
   depends_on    = [aws_network_interface.NAT_ENI]
 
   network_interface {
@@ -90,6 +193,15 @@ resource "aws_instance" "NAT_Instance" {
   tags = {
     Name = "NAT_Instance"
   }
+}
+
+# NAT Instance ENI EIP
+resource "aws_eip" "NAT_Instance_eip" {
+  network_interface = aws_network_interface.NAT_ENI.id
+  tags = {
+    Name = "NAT_EIP"
+  }
+  depends_on    = [aws_network_interface.NAT_ENI, aws_instance.NAT_Instance]
 }
 
 # Private Subnet Routing Table ( dest: NAT Instance ENI )
@@ -134,49 +246,25 @@ module "eks" {
   vpc_id                          = module.vpc.vpc_id
   subnet_ids                      = module.vpc.private_subnets
 
-  # IRSA(IAM Role for Service Account) Enable / OIDC(OpenID Connect) 구성
-  # EKS Cluster 내부의 Object에 IAM Role을 부여 ( Pod 혹은 Namespace 영역별 권한 부여를 다르게 설정 )
-  # https://aws.amazon.com/ko/blogs/containers/diving-into-iam-roles-for-service-accounts/
+  # OIDC(OpenID Connect) 구성 
   enable_irsa = true
 
-  # Karpenter ( Cluster Auto-Scaling ) Security Group Policy 
-  node_security_group_additional_rules = {
-    ingress_nodes_karpenter_port = {
-      description                   = "Cluster API to Node group for Karpenter webhook"
-      protocol                      = "tcp"
-      from_port                     = 8443
-      to_port                       = 8443
-      type                          = "ingress"
-      source_cluster_security_group = true
-    }
-  }
-
-  # Karpenter ( Cluster Auto-Scaling ) Security Group TAG
-  node_security_group_tags = {
-    "karpenter.sh/discovery" = local.cluster_name
-  }
-
+  # EKS Worker Node 정의 ( ManagedNode방식 / Launch Template 자동 구성 )
   eks_managed_node_groups = {
     initial = {
-      instance_types         = ["t3.large"]
+      instance_types         = ["t3.medium"]
       create_security_group  = false
-      create_launch_template = false # do not remove
-      launch_template_name   = ""    # do not remove
+      create_launch_template = false # Required Option 
+      launch_template_name   = ""    # Required Option
 
       min_size     = 2
       max_size     = 3
       desired_size = 2
-
-      # Karpenter에서 사용 할 IAM Role 권한 추가
-      iam_role_additional_policies = [
-        "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-      ]
     }
   }
 
-  # EKS configmap Resource의 "aws-auth" Object에서 IAM User 혹은 Role을 등록하여 관리하는 작업을 허용 ( RBAC 작업 )
+  # K8s ConfigMap Object "aws_auth" 구성
   manage_aws_auth_configmap = true
-
   aws_auth_users = [
     {
       userarn  = "arn:aws:iam::${local.cluster_admin}:user/admin"
@@ -188,49 +276,8 @@ module "eks" {
   aws_auth_accounts = [
     "${local.cluster_admin}"
   ]
-  depends_on = [module.vpc]
 }
 
 # ================================================================
 # ================================================================
 # ================================================================
-
-# Private_Subnet Tag
-resource "aws_ec2_tag" "private_subnet_tag" {
-  for_each    = toset(module.vpc.private_subnets)
-  resource_id = each.value
-  key         = "kubernetes.io/role/internal-elb"
-  value       = "1"
-  depends_on  = [module.vpc]
-}
-
-resource "aws_ec2_tag" "private_subnet_cluster_tag" {
-  for_each    = toset(module.vpc.private_subnets)
-  resource_id = each.value
-  key         = "kubernetes.io/cluster/${local.cluster_name}"
-  value       = "owned"
-  depends_on  = [module.vpc]
-}
-
-resource "aws_ec2_tag" "private_subnet_karpenter_tag" {
-  for_each    = toset(module.vpc.private_subnets)
-  resource_id = each.value
-  key         = "karpenter.sh/discovery/${local.cluster_name}"
-  value       = local.cluster_name
-  depends_on  = [module.vpc]
-}
-
-# Public_Subnet Tag
-resource "aws_ec2_tag" "public_subnet_tag" {
-  for_each    = toset(module.vpc.public_subnets)
-  resource_id = each.value
-  key         = "kubernetes.io/role/elb"
-  value       = "1"
-  depends_on  = [module.vpc]
-}
-
-# ================================================================
-# ================================================================
-# ================================================================
-
-

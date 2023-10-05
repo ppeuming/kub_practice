@@ -4,21 +4,16 @@ locals {
   cidr            = var.cidr
   public_subnets  = var.public_subnets
   private_subnets = var.private_subnets
-
-  any_port      = 0
-  any_protocol  = "-1"
-  tcp_protocol  = "tcp"
-  icmp_protocol = "icmp"
-  all_network   = "0.0.0.0/0"
+  ssh_port        = 22
+  any_port        = 0
+  any_protocol    = "-1"
+  tcp_protocol    = "tcp"
+  icmp_protocol   = "icmp"
+  all_network     = "0.0.0.0/0"
 
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
   cluster_admin   = var.cluster_admin
-
-  tag = {
-    Environment = "test"
-    Terraform   = "true"
-  }
 }
 
 variable "cidr" {

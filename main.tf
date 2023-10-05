@@ -30,6 +30,10 @@ provider "aws" {
 # ================================================================
 # ================================================================
 
+data "aws_iam_user" "EKS_Admin_ID" {
+  user_name = "admin"
+}
+
 # AWS EKS Cluster
 module "aws_eks_cluster" {
   source          = "./modules/eks_cluster"
