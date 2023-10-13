@@ -1,19 +1,23 @@
 locals {
-  region          = "ap-northeast-2"
-  azs             = ["ap-northeast-2a", "ap-northeast-2c"]
-  cidr            = var.cidr
-  public_subnets  = var.public_subnets
-  private_subnets = var.private_subnets
-  ssh_port        = 22
-  any_port        = 0
-  any_protocol    = "-1"
-  tcp_protocol    = "tcp"
-  icmp_protocol   = "icmp"
-  all_network     = "0.0.0.0/0"
+  region           = "ap-northeast-2"
+  azs              = ["ap-northeast-2a", "ap-northeast-2c"]
+  cidr             = var.cidr
+  public_subnets   = var.public_subnets
+  private_subnets  = var.private_subnets
+  database_subnets = var.database_subnets
+  ssh_port         = 22
+  any_port         = 0
+  any_protocol     = "-1"
+  tcp_protocol     = "tcp"
+  icmp_protocol    = "icmp"
+  all_network      = "0.0.0.0/0"
 
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
   cluster_admin   = var.cluster_admin
+  tags = {
+    cluster_name = var.cluster_name
+  }
 }
 
 variable "cidr" {
@@ -28,6 +32,11 @@ variable "public_subnets" {
 
 variable "private_subnets" {
   description = "VPC Private Subnets"
+  type        = list(any)
+}
+
+variable "database_subnets" {
+  description = "VPC Database Subnets"
   type        = list(any)
 }
 

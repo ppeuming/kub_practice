@@ -1,23 +1,5 @@
-# ================================================================
-# ================================================================
-# ================================================================
-
-# Provider
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region  = "ap-northeast-2"
-  profile = "admin_user"
-}
-
 /* 
+  # Kubernetes 추가 Provider
   EKS Cluster 구성 후 초기 구성 작업을 수행하기 위한 Terraform Kubernetes Provider 설정 
   생성 된 EKS Cluster의 EndPoint 주소 및 인증정보등을 DataSource로 정의 후 Provider 설정 정보로 입력
   EX): ConfigMap Object "aws-auth" 생성 및 사용자 등록
@@ -33,6 +15,7 @@ data "aws_eks_cluster_auth" "cluster" {
   name = module.eks.cluster_id
 }
 
+
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
@@ -43,9 +26,7 @@ provider "kubernetes" {
 # - aws_eks_cluster      : https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster.html
 # - aws_eks_cluster_auth : https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster_auth
 
-# ================================================================
-# ================================================================
-# ================================================================
+
 
 # VPC
 module "vpc" {
@@ -56,6 +37,8 @@ module "vpc" {
   cidr                 = local.cidr
   public_subnets       = local.public_subnets
   private_subnets      = local.private_subnets
+  database_subnets     = local.database_subnets
+
   enable_dns_hostnames = "true"
   enable_dns_support   = "true"
   tags = {
@@ -63,9 +46,7 @@ module "vpc" {
   }
 }
 
-# ================================================================
-# ================================================================
-# ================================================================
+
 
 # Security-Group (BastionHost)
 module "BastionHost_SG" {
@@ -115,8 +96,8 @@ data "aws_key_pair" "EC2-Key" {
   key_name = "EC2-key"
 }
 
-
-# BastionHost Instance 
+# BastionHost Instance
+# EKS Cluster SG : data.aws_eks_cluster.cluster.vpc_config[0].cluster_security_group_id 
 resource "aws_instance" "BastionHost" {
   ami                         = "ami-0ea4d4b8dc1e46212"
   instance_type               = "t2.micro"
@@ -130,9 +111,7 @@ resource "aws_instance" "BastionHost" {
   }
 }
 
-# ================================================================
-# ================================================================
-# ================================================================
+
 
 # Security-Group (NAT-Instance)
 module "NAT_SG" {
@@ -201,7 +180,7 @@ resource "aws_eip" "NAT_Instance_eip" {
   tags = {
     Name = "NAT_EIP"
   }
-  depends_on    = [aws_network_interface.NAT_ENI, aws_instance.NAT_Instance]
+  depends_on = [aws_network_interface.NAT_ENI, aws_instance.NAT_Instance]
 }
 
 # Private Subnet Routing Table ( dest: NAT Instance ENI )
@@ -229,9 +208,7 @@ resource "aws_route" "private_subnet_2" {
   depends_on             = [module.vpc, aws_instance.NAT_Instance]
 }
 
-# ================================================================
-# ================================================================
-# ================================================================
+
 
 # Terraform EKS Module DOCS : https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest
 module "eks" {
@@ -272,12 +249,6 @@ module "eks" {
       groups   = ["system:masters"]
     },
   ]
-
-  aws_auth_accounts = [
-    "${local.cluster_admin}"
-  ]
 }
 
-# ================================================================
-# ================================================================
-# ================================================================
+
