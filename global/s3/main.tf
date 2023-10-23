@@ -13,7 +13,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "myterraform-bucket-state-choi-t"
+  bucket = "myterraform-bucket-state-hwang-t"
   tags = {
     Name = "terraform_state"
   }
@@ -47,7 +47,7 @@ resource "aws_s3_bucket_versioning" "terraform_state_ver" {
 }
 
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "myTerraform-bucket-lock-choi-t"
+  name         = "myTerraform-bucket-lock-hwang-t"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 

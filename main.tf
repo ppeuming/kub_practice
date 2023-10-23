@@ -5,11 +5,11 @@
 # Terraform 초기구성
 terraform {
   backend "s3" {
-    bucket         = "myterraform-bucket-state-choi-t"
+    bucket         = "myterraform-bucket-state-hwang-t"
     key            = "aws_eks/terraform.tfstate"
     region         = "ap-northeast-2"
     profile        = "admin_user"
-    dynamodb_table = "myTerraform-bucket-lock-choi-t"
+    dynamodb_table = "myTerraform-bucket-lock-hwang-t"
     encrypt        = true
   }
 
@@ -72,7 +72,7 @@ output "database_subnet_group" {
 
 # AWS RDS ( CI/CD에서 사용 예정 ) 
 
-module "aws_eks_rds" {
+/* module "aws_eks_rds" {
   source      = "./modules/rds"
   db_port     = 3306
   db_name     = "django_db"
@@ -94,7 +94,7 @@ module "ecr" {
   tags = {
     Terraform = "true"
   }
-}
+} */
 
 
 

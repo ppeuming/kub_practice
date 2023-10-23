@@ -229,7 +229,7 @@ module "eks" {
   # EKS Worker Node 정의 ( ManagedNode방식 / Launch Template 자동 구성 )
   eks_managed_node_groups = {
     initial = {
-      instance_types         = ["t3.medium"]
+      instance_types         = ["t3.small"]
       create_security_group  = false
       create_launch_template = false # Required Option 
       launch_template_name   = ""    # Required Option
