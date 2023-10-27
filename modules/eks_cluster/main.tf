@@ -251,4 +251,21 @@ module "eks" {
   ]
 }
 
+// Private Subnet Tag ( AWS Load Balancer Controller Tag / internal )
+resource "aws_ec2_tag" "private_subnet_tag" {
+  for_each    = toset(module.vpc.private_subnets)
+  resource_id = each.value
+  key         = "kubernetes.io/role/internal-elb"
+  value       = "1"
+}
+
+// Public Subnet Tag ( AWS Load Balancer Controller Tag / internet-facing )
+resource "aws_ec2_tag" "public_subnet_tag" {
+  for_each    = toset(module.vpc.public_subnets)
+  resource_id = each.value
+  key         = "kubernetes.io/role/elb"
+  value       = "1"
+}
+
+
 
